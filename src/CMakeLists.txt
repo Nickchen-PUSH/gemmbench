@@ -22,10 +22,3 @@ if(_OPS_OBJECT_TARGETS)
 		target_sources(gemmbench PRIVATE $<TARGET_OBJECTS:${_ops_target}>)
 	endforeach()
 endif()
-
-
-# target_link_libraries(gemmbench PRIVATE gcc_s)
-
-# clang -march=armv8.6-a+sme+sve2+sve -lgcc_s \
-# -L/home/share/pcdemo/home/guest1_test/HPCKit_25.1.0/HPCKit/25.1.0/compiler/bisheng/lib/aarch64-unknown-linux-gnu/ -rtlib=compiler-rt \
-# -O3
