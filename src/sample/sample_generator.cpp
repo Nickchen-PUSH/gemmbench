@@ -2,38 +2,30 @@
 
 #include <random>
 
-#include "../common/dtype.h"
-
 namespace
 {
-std::vector<std::uint8_t> generate_matrix(const SampleConfig &cfg,
-                                          std::uint32_t seed)
+MatrixBuffer generate_matrix(int rows, int cols, std::uint32_t seed)
 {
-    const std::size_t elements = static_cast<std::size_t>(cfg.M) * static_cast<std::size_t>(cfg.K);
-    const std::size_t bytes = elements * dtype_size(cfg.dtype);
-    std::vector<std::uint8_t> buffer(bytes);
-
-    std::mt19937 gen(seed);
+    std::mt19937 rng(seed);
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
-    for (std::size_t idx = 0; idx < elements; ++idx)
-    {
-        store_value(buffer.data(), idx, cfg.dtype, dist(gen));
-    }
+    const std::size_t size = static_cast<std::size_t>(rows) * static_cast<std::size_t>(cols);
+    auto buffer = MatrixBuffer::allocate(size);
 
+    for (int i = 0; i < rows * cols; ++i)
+    {
+        buffer.data()[i] = dist(rng);
+    }
     return buffer;
 }
 } // namespace
 
-std::vector<std::uint8_t> SampleGenerator::generateA(const SampleConfig &cfg)
+MatrixBuffer SampleGenerator::generateA(const SampleConfig &cfg)
 {
-    return generate_matrix(cfg, 123);
+    return generate_matrix(cfg.M, cfg.K, 123);
 }
 
-std::vector<std::uint8_t> SampleGenerator::generateB(const SampleConfig &cfg)
+MatrixBuffer SampleGenerator::generateB(const SampleConfig &cfg)
 {
-    SampleConfig transposed = cfg;
-    transposed.M = cfg.K;
-    transposed.K = cfg.N;
-    return generate_matrix(transposed, 456);
+    return generate_matrix(cfg.K, cfg.N, 456);
 }

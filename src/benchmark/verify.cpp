@@ -5,18 +5,17 @@
 #include <limits>
 #include <stdexcept>
 
-VerifyResult verify_result(const std::vector<float> &expected,
-                           const void *actual,
+VerifyResult verify_result(const float *expected,
+                           const float *actual,
                            int M,
                            int N,
-                           DataType dtype,
                            double atol,
                            double rtol)
 {
     const std::size_t total = static_cast<std::size_t>(M) * static_cast<std::size_t>(N);
-    if (expected.size() != total)
+    if ((total > 0) && (!expected || !actual))
     {
-        throw std::runtime_error("Expected matrix size does not match provided dimensions");
+        throw std::runtime_error("Null matrix pointer provided for verification");
     }
 
     VerifyResult result{};
@@ -34,7 +33,7 @@ VerifyResult verify_result(const std::vector<float> &expected,
     for (std::size_t idx = 0; idx < total; ++idx)
     {
         const float exp_val = expected[idx];
-        const float act_val = load_value(actual, idx, dtype);
+        const float act_val = actual[idx];
         const double abs_err = std::abs(static_cast<double>(exp_val) - static_cast<double>(act_val));
         const double rel_err = abs_err / (std::abs(static_cast<double>(exp_val)) + 1e-12);
 

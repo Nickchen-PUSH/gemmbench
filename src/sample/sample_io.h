@@ -1,17 +1,16 @@
 #pragma once
 
 #include <string>
-#include <vector>
-#include <cstdint>
 
+#include "../common/matrix_buffer.h"
 #include "sample_generator.h"
 
 struct SampleData
 {
-    SampleConfig cfg;
-    std::vector<std::uint8_t> A;
-    std::vector<std::uint8_t> B;
-    std::vector<float> C;
+    SampleConfig cfg{};
+    MatrixBuffer A;
+    MatrixBuffer B;
+    MatrixBuffer C;
 };
 
 void save_sample_file(const std::string &path, const SampleData &data);

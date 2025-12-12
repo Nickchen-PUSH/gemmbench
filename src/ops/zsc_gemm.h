@@ -1,10 +1,10 @@
 #pragma once
 #include "gemm_op.h"
 
-class NaiveGemmOp : public GemmOp
+class ZscGemmOp : public GemmOp
 {
 public:
-    std::string name() const override { return "naive"; }
+    std::string name() const override { return "zsc"; }
     void run(const float *A, const float *B, float *C,
              int M, int N, int K) override;
 };

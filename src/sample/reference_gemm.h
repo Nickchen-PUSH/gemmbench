@@ -1,10 +1,8 @@
 #pragma once
 
-#include <vector>
-#include <cstdint>
-
+#include "../common/matrix_buffer.h"
 #include "sample_generator.h"
 
-std::vector<float> compute_reference_c(const SampleConfig &cfg,
-                                       const std::vector<std::uint8_t> &A,
-                                       const std::vector<std::uint8_t> &B);
+MatrixBuffer compute_reference_c(const SampleConfig &cfg,
+                                 const MatrixBuffer &A,
+                                 const MatrixBuffer &B);

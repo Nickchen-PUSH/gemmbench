@@ -5,3 +5,6 @@ cases
 
 # IDE files
 .vscode
+
+# output
+results

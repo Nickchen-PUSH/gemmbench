@@ -1,9 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <vector>
-
-#include "common/dtype.h"
 
 struct VerifyResult
 {
@@ -19,10 +16,9 @@ struct VerifyResult
     double mismatch_rel_error;
 };
 
-VerifyResult verify_result(const std::vector<float> &expected,
-                           const void *actual,
+VerifyResult verify_result(const float *expected,
+                           const float *actual,
                            int M,
                            int N,
-                           DataType dtype,
-                           double atol = 1e-3,
-                           double rtol = 1e-2);
+                           double atol = 1e-4,
+                           double rtol = 1e-3);

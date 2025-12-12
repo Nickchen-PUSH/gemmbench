@@ -1,12 +1,10 @@
 #include "cli.h"
 
+#include <fstream>
 #include <iostream>
 #include <memory>
-#include <vector>
-#include <fstream>
 #include <string>
 #include <utility>
-#include <cstdint>
 
 #include "CLI11.hpp"
 #include "../sample/sample_generator.h"
@@ -15,7 +13,6 @@
 #include "../ops/registry.h"
 #include "../benchmark/benchmark.h"
 #include "../benchmark/verify.h"
-#include "../common/dtype.h"
 
 int cli_main(int argc, char **argv)
 {
@@ -23,7 +20,6 @@ int cli_main(int argc, char **argv)
 
     constexpr int kDefaultDim = 512;
     int M = kDefaultDim, N = kDefaultDim, K = kDefaultDim;
-    std::string dtype_name = "float32";
     std::string op_name;
     std::string output_json;
     std::string sample_out = "samples/default_sample.bin";
@@ -34,7 +30,6 @@ int cli_main(int argc, char **argv)
     gen_cmd->add_option("--m", M, "M dimension")->default_val(std::to_string(M));
     gen_cmd->add_option("--n", N, "N dimension")->default_val(std::to_string(N));
     gen_cmd->add_option("--k", K, "K dimension")->default_val(std::to_string(K));
-    gen_cmd->add_option("--dtype", dtype_name, "Data type (float32, float16, bfloat16)");
     gen_cmd->add_option("--sample", sample_out, "Path to save the generated sample")
         ->capture_default_str();
 
@@ -65,7 +60,6 @@ int cli_main(int argc, char **argv)
         try
         {
             SampleConfig cfg{M, N, K};
-            cfg.dtype = parse_dtype(dtype_name);
             SampleGenerator sg;
             auto A = sg.generateA(cfg);
             auto B = sg.generateB(cfg);
@@ -75,7 +69,6 @@ int cli_main(int argc, char **argv)
             std::cout << "Saved sample matrices to " << sample_out << "\n";
             std::cout << "A size: " << cfg.M << "x" << cfg.K
                       << ", B size: " << cfg.K << "x" << cfg.N
-                      << ", dtype=" << dtype_to_string(cfg.dtype)
                       << ", C reference computed" << "\n";
         }
         catch (const std::exception &ex)
@@ -117,28 +110,20 @@ int cli_main(int argc, char **argv)
         }
 
         const auto &cfg = sample.cfg;
-        if (!op->supports_dtype(cfg.dtype))
-        {
-            std::cerr << "Operator " << op_name << " does not support dtype "
-                      << dtype_to_string(cfg.dtype) << "\n";
-            return 1;
-        }
         std::cout << "Running op=" << op_name
                   << " with M=" << cfg.M << " N=" << cfg.N << " K=" << cfg.K
-                  << " dtype=" << dtype_to_string(cfg.dtype)
                   << " from " << sample_in << "\n";
 
-        const std::size_t c_bytes = static_cast<std::size_t>(cfg.M) * static_cast<std::size_t>(cfg.N) * dtype_size(cfg.dtype);
-        std::vector<std::uint8_t> computed(c_bytes);
+        auto computed = MatrixBuffer::allocate(static_cast<std::size_t>(cfg.M) * static_cast<std::size_t>(cfg.N));
         auto result = bench_gemm(op.get(), sample.A.data(), sample.B.data(), computed.data(),
-                                 cfg.M, cfg.N, cfg.K, cfg.dtype);
+                                 cfg.M, cfg.N, cfg.K);
         double flops = 2.0 * cfg.M * cfg.N * cfg.K;
         double tflops = flops / (result.ms * 1e6);
 
         std::cout << "Time = " << result.ms << " ms\n";
         std::cout << "TFLOPS = " << tflops << "\n";
 
-        auto verify = verify_result(sample.C, computed.data(), cfg.M, cfg.N, cfg.dtype);
+        auto verify = verify_result(sample.C.data(), computed.data(), cfg.M, cfg.N);
         if (verify.ok)
         {
             std::cout << "Verification PASSED. max_abs_err=" << verify.max_abs_error

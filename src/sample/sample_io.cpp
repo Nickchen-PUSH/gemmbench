@@ -5,14 +5,12 @@
 #include <fstream>
 #include <stdexcept>
 
-#include "../common/dtype.h"
-
 namespace
 {
-constexpr std::uint32_t kSampleMagic = 0x47534d4d; // "GSMM" magic tag
-constexpr std::uint32_t kSampleVersion = 2;
+constexpr std::uint32_t kSampleMagic = 0x47534d4d; // "GSMM"
+constexpr std::uint32_t kSampleVersion = 1;
 
-struct SampleFileHeaderBase
+struct SampleFileHeader
 {
     std::uint32_t magic;
     std::uint32_t version;
@@ -21,24 +19,10 @@ struct SampleFileHeaderBase
     std::uint32_t K;
 };
 
-DataType decode_dtype(std::uint32_t raw)
-{
-    switch (static_cast<DataType>(raw))
-    {
-    case DataType::Float32:
-    case DataType::Float16:
-    case DataType::BFloat16:
-        return static_cast<DataType>(raw);
-    default:
-        throw std::runtime_error("Sample file contains unsupported dtype tag");
-    }
-}
-
 void validate_dimensions(const SampleData &data)
 {
-    const auto elem_size = dtype_size(data.cfg.dtype);
-    const auto expectedA = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.K) * elem_size;
-    const auto expectedB = static_cast<std::size_t>(data.cfg.K) * static_cast<std::size_t>(data.cfg.N) * elem_size;
+    const auto expectedA = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.K);
+    const auto expectedB = static_cast<std::size_t>(data.cfg.K) * static_cast<std::size_t>(data.cfg.N);
     const auto expectedC = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.N);
     if (data.A.size() != expectedA || data.B.size() != expectedB || data.C.size() != expectedC)
     {
@@ -47,95 +31,79 @@ void validate_dimensions(const SampleData &data)
 }
 } // namespace
 
-void save_sample_file(const std::string &path, const SampleData &data) {
+void save_sample_file(const std::string &path, const SampleData &data)
+{
     validate_dimensions(data);
 
     const auto parent = std::filesystem::path(path).parent_path();
-    if (!parent.empty()) {
+    if (!parent.empty())
+    {
         std::filesystem::create_directories(parent);
     }
 
     std::ofstream ofs(path, std::ios::binary);
-    if (!ofs) {
+    if (!ofs)
+    {
         throw std::runtime_error("Failed to open sample file for writing: " + path);
     }
 
-    SampleFileHeaderBase header{ kSampleMagic, kSampleVersion,
-                                 static_cast<std::uint32_t>(data.cfg.M),
-                                 static_cast<std::uint32_t>(data.cfg.N),
-                                 static_cast<std::uint32_t>(data.cfg.K) };
+    SampleFileHeader header{ kSampleMagic, kSampleVersion,
+                             static_cast<std::uint32_t>(data.cfg.M),
+                             static_cast<std::uint32_t>(data.cfg.N),
+                             static_cast<std::uint32_t>(data.cfg.K) };
     ofs.write(reinterpret_cast<const char *>(&header), sizeof(header));
 
-    const std::uint32_t dtype_tag = static_cast<std::uint32_t>(data.cfg.dtype);
-    ofs.write(reinterpret_cast<const char *>(&dtype_tag), sizeof(dtype_tag));
-
-    const auto write_bytes = [&ofs](const void *ptr, std::size_t bytes) {
-        if (bytes == 0)
+    const auto write_buffer = [&ofs](const MatrixBuffer &matrix) {
+        if (matrix.empty())
             return;
-        ofs.write(reinterpret_cast<const char *>(ptr), static_cast<std::streamsize>(bytes));
+        ofs.write(reinterpret_cast<const char *>(matrix.data()),
+                  static_cast<std::streamsize>(matrix.size() * sizeof(float)));
     };
 
-    write_bytes(data.A.data(), data.A.size());
-    write_bytes(data.B.data(), data.B.size());
-    write_bytes(data.C.data(), data.C.size() * sizeof(float));
+    write_buffer(data.A);
+    write_buffer(data.B);
+    write_buffer(data.C);
 }
 
-SampleData load_sample_file(const std::string &path) {
+SampleData load_sample_file(const std::string &path)
+{
     std::ifstream ifs(path, std::ios::binary);
-    if (!ifs) {
+    if (!ifs)
+    {
         throw std::runtime_error("Failed to open sample file for reading: " + path);
     }
 
-    SampleFileHeaderBase header{};
+    SampleFileHeader header{};
     ifs.read(reinterpret_cast<char *>(&header), sizeof(header));
-    if (!ifs || header.magic != kSampleMagic)
+    if (!ifs || header.magic != kSampleMagic || header.version != kSampleVersion)
     {
         throw std::runtime_error("Invalid or corrupt sample file header: " + path);
     }
 
-    std::uint32_t dtype_tag = static_cast<std::uint32_t>(DataType::Float32);
-    if (header.version == 1)
-    {
-        // legacy files do not encode dtype, assume float32
-        dtype_tag = static_cast<std::uint32_t>(DataType::Float32);
-    }
-    else if (header.version == kSampleVersion)
-    {
-        if (!ifs.read(reinterpret_cast<char *>(&dtype_tag), sizeof(dtype_tag)))
-        {
-            throw std::runtime_error("Sample file missing dtype information: " + path);
-        }
-    }
-    else
-    {
-        throw std::runtime_error("Unsupported sample file version: " + std::to_string(header.version));
-    }
-
     SampleData data;
     data.cfg = SampleConfig{static_cast<int>(header.M), static_cast<int>(header.N), static_cast<int>(header.K)};
-    data.cfg.dtype = decode_dtype(dtype_tag);
 
-    const auto elem_size = dtype_size(data.cfg.dtype);
-    const auto a_bytes = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.K) * elem_size;
-    const auto b_bytes = static_cast<std::size_t>(data.cfg.K) * static_cast<std::size_t>(data.cfg.N) * elem_size;
-    const auto c_elems = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.N);
-
-    data.A.resize(a_bytes);
-    data.B.resize(b_bytes);
-    data.C.resize(c_elems);
-
-    const auto read_bytes = [&ifs, &path](void *dst, std::size_t bytes) {
-        if (bytes == 0)
-            return;
-        if (!ifs.read(reinterpret_cast<char *>(dst), static_cast<std::streamsize>(bytes)))
+    const auto read_buffer = [&ifs, &path](std::size_t count) {
+        MatrixBuffer buffer = MatrixBuffer::allocate(count);
+        if (count == 0)
+        {
+            return buffer;
+        }
+        const auto bytes = static_cast<std::streamsize>(count * sizeof(float));
+        if (!ifs.read(reinterpret_cast<char *>(buffer.data()), bytes))
         {
             throw std::runtime_error("Sample file is truncated: " + path);
         }
+        return buffer;
     };
 
-    read_bytes(data.A.data(), data.A.size());
-    read_bytes(data.B.data(), data.B.size());
-    read_bytes(data.C.data(), data.C.size() * sizeof(float));
+    const auto a_size = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.K);
+    const auto b_size = static_cast<std::size_t>(data.cfg.K) * static_cast<std::size_t>(data.cfg.N);
+    const auto c_size = static_cast<std::size_t>(data.cfg.M) * static_cast<std::size_t>(data.cfg.N);
+
+    data.A = read_buffer(a_size);
+    data.B = read_buffer(b_size);
+    data.C = read_buffer(c_size);
 
     return data;
 }
