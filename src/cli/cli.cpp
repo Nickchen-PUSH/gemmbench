@@ -24,6 +24,8 @@ int cli_main(int argc, char **argv)
     std::string output_json;
     std::string sample_out = "samples/default_sample.bin";
     std::string sample_in = sample_out;
+    bool verbose = false;
+    std::string verbose_matrix_file = "verbose_matrices.txt";
 
     // ---------- 子命令 generate ----------
     auto gen_cmd = app.add_subcommand("generate", "Generate test matrices");
@@ -38,6 +40,10 @@ int cli_main(int argc, char **argv)
     run_cmd->add_option("--op", op_name, "Operator name")->required();
     run_cmd->add_option("--output", output_json, "Output JSON file");
     run_cmd->add_option("--sample", sample_in, "Path to load the sample from")
+        ->capture_default_str();
+
+    run_cmd->add_option("--verbose", verbose, "Enable matrix printout for debugging");
+    run_cmd->add_option("--verbose-matrix-file", verbose_matrix_file, "File to save verbose matrix output")
         ->capture_default_str();
 
     // ---------- 子命令 list-ops ----------
@@ -109,16 +115,24 @@ int cli_main(int argc, char **argv)
             return 1;
         }
 
+        if (op->columnMajor())
+        {
+            std::cout << "Converting sample matrices to column-major format for operator " << op_name << "\n";
+            sample.convert_to_column_major();
+        }
+
         const auto &cfg = sample.cfg;
         std::cout << "Running op=" << op_name
                   << " with M=" << cfg.M << " N=" << cfg.N << " K=" << cfg.K
                   << " from " << sample_in << "\n";
 
         auto computed = MatrixBuffer::allocate(static_cast<std::size_t>(cfg.M) * static_cast<std::size_t>(cfg.N));
+        
+
         auto result = bench_gemm(op.get(), sample.A.data(), sample.B.data(), computed.data(),
                                  cfg.M, cfg.N, cfg.K);
         double flops = 2.0 * cfg.M * cfg.N * cfg.K;
-        double tflops = flops / (result.ms * 1e6);
+        double tflops = flops / (result.ms * 1e-3 * 1e9);
 
         std::cout << "Time = " << result.ms << " ms\n";
         std::cout << "TFLOPS = " << tflops << "\n";
@@ -138,6 +152,23 @@ int cli_main(int argc, char **argv)
                       << " abs_err=" << verify.mismatch_abs_error
                       << " rel_err=" << verify.mismatch_rel_error << "\n";
         }
+        if (verbose)
+        {
+            std::cout << "==============================\n";
+            std::cout << "Matrix A:\n";
+            sample.A.print(cfg.M, cfg.K, std::cout);
+            std::cout << "------------------------------\n";
+            std::cout << "Matrix B:\n";
+            sample.B.print(cfg.K, cfg.N, std::cout);
+            std::cout << "------------------------------\n";
+            std::cout << "Reference Matrix C:\n";
+            sample.C.print(cfg.M, cfg.N, std::cout);
+            std::cout << "------------------------------\n";
+            std::cout << "Computed Matrix C:\n";
+            computed.print(cfg.M, cfg.N, std::cout);
+            std::cout << "==============================\n";
+
+        }
 
         if (!output_json.empty())
         {
@@ -155,6 +186,7 @@ int cli_main(int argc, char **argv)
             ofs << "}\n";
             ofs.close();
             std::cout << "Saved result to " << output_json << "\n";
+            std::cout << "==============================\n";
         }
 
         return verify.ok ? 0 : 2;

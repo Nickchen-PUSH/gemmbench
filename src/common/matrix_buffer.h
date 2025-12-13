@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <new>
 #include <stdexcept>
-
+#include <iostream>
 #if defined(_MSC_VER)
 #include <malloc.h>
 #endif
@@ -86,18 +86,50 @@ public:
         alignment_ = 0;
     }
 
+    void convert_to_column_major(int M, int N)
+    {
+        if (ptr_ == nullptr || size_ != static_cast<std::size_t>(M) * static_cast<std::size_t>(N))
+        {
+            throw std::runtime_error("Invalid matrix dimensions for conversion");
+        }
+
+        MatrixBuffer temp = MatrixBuffer::allocate(size_, alignment_);
+
+        for (int j = 0; j < N; ++j)
+        {
+            for (int i = 0; i < M; ++i)
+            {
+                temp[j * M + i] = ptr_[i * N + j];
+            }
+        }
+
+        std::swap(ptr_, temp.ptr_);
+
+        // temp will release the old memory in its destructor
+    }
+
+    void print(std::size_t rows, std::size_t cols, std::ostream &os = std::cout) const
+    {
+        if (ptr_ == nullptr || size_ != rows * cols)
+        {
+            throw std::runtime_error("Invalid matrix dimensions for printing");
+        }
+
+        for (std::size_t i = 0; i < rows; ++i)
+        {
+            for (std::size_t j = 0; j < cols; ++j)
+            {
+                os << ptr_[i * cols + j] << " ";
+            }
+            os << "\n";
+        }
+    }
+
+
 private:
     static float *allocate_raw(std::size_t count, std::size_t alignment)
     {
         const std::size_t bytes = count * sizeof(float);
-#if defined(_MSC_VER)
-        void *mem = _aligned_malloc(bytes, alignment);
-        if (!mem)
-        {
-            throw std::bad_alloc();
-        }
-        return static_cast<float *>(mem);
-#else
         void *mem = nullptr;
         const int rc = posix_memalign(&mem, alignment, bytes);
         if (rc != 0)
@@ -105,16 +137,11 @@ private:
             throw std::bad_alloc();
         }
         return static_cast<float *>(mem);
-#endif
     }
 
     static void release(void *ptr) noexcept
     {
-#if defined(_MSC_VER)
-        _aligned_free(ptr);
-#else
         std::free(ptr);
-#endif
     }
 
     float *ptr_ = nullptr;
