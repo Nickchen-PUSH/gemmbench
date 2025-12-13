@@ -9,10 +9,11 @@ set(OPS_COMMON_COMPILE_OPTIONS
 
 # keep track of every per-op object library so we can inject them later
 set_property(GLOBAL PROPERTY OPS_OBJECT_TARGETS "")
+set_property(GLOBAL PROPERTY OPS_LINK_LIBRARIES "")
 
 # helper to build each operator with its own compiler flags
 function(register_op name)
-	cmake_parse_arguments(OP "" "" "SOURCES;HEADERS;COMPILE_OPTIONS;LINK_LIB" ${ARGN})
+	cmake_parse_arguments(OP "" "" "SOURCES;HEADERS;COMPILE_OPTIONS;LINK_LIB;INCLUDE_DIR" ${ARGN})
 
 	if(NOT OP_SOURCES)
 		message(FATAL_ERROR "register_op(${name}) requires at least one source file.")
@@ -20,8 +21,11 @@ function(register_op name)
 
 	set(op_target "${name}_object")
 	add_library(${op_target} OBJECT ${OP_SOURCES} ${OP_HEADERS})
-	target_link_libraries(${op_target} PRIVATE ${OP_LINK_LIB})
+	if(OP_LINK_LIB)
+        set_property(GLOBAL APPEND PROPERTY OPS_LINK_LIBRARIES ${OP_LINK_LIB})
+    endif()
 	target_include_directories(${op_target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+	target_include_directories(${op_target} PRIVATE ${OP_INCLUDE_DIR})
 	target_compile_options(${op_target} PRIVATE ${OPS_COMMON_COMPILE_OPTIONS} ${OP_COMPILE_OPTIONS})
 	set_property(TARGET ${op_target} PROPERTY POSITION_INDEPENDENT_CODE ON)
 	set_property(GLOBAL APPEND PROPERTY OPS_OBJECT_TARGETS ${op_target})
@@ -38,21 +42,5 @@ register_op(naive_op_column_major
 	HEADERS naive_op_column_major.h
 )
 
-register_op(openblas
-	SOURCES openblas.cpp
-	HEADERS openblas.h
-)
-
-# register_op(sgemm
-# 	SOURCES sgemm.cpp
-# 	HEADERS sgemm.h
-# 	COMPILE_OPTIONS -march=armv8.6-a+sme+sve2+sve
-# 	LINK_LIB gcc_s
-# )
-
-register_op(zsc_gemm_32
-	SOURCES zsc_gemm_32.cpp
-	HEADERS zsc_gemm_32.h
-)
 
 target_sources(ops PRIVATE registry.cpp registry.h)

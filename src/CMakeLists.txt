@@ -22,3 +22,9 @@ if(_OPS_OBJECT_TARGETS)
 		target_sources(gemmbench PRIVATE $<TARGET_OBJECTS:${_ops_target}>)
 	endforeach()
 endif()
+
+get_property(ALL_OPS_LIBS GLOBAL PROPERTY OPS_LINK_LIBRARIES)
+
+if(ALL_OPS_LIBS)
+    target_link_libraries(gemmbench PRIVATE ${ALL_OPS_LIBS})
+endif()
