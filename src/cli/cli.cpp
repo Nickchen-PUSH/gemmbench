@@ -20,6 +20,8 @@ int cli_main(int argc, char **argv)
 
     constexpr int kDefaultDim = 512;
     int M = kDefaultDim, N = kDefaultDim, K = kDefaultDim;
+    int pattern = RANDOM;
+    std::string pattern_str;
     std::string op_name;
     std::string output_json;
     std::string sample_out = "samples/default_sample.bin";
@@ -32,6 +34,8 @@ int cli_main(int argc, char **argv)
     gen_cmd->add_option("--m", M, "M dimension")->default_val(std::to_string(M));
     gen_cmd->add_option("--n", N, "N dimension")->default_val(std::to_string(N));
     gen_cmd->add_option("--k", K, "K dimension")->default_val(std::to_string(K));
+    gen_cmd->add_option("--type", pattern_str, "Type of matrix pattern: RANDOM, SEQUENTIAL, ONES, ZEROS, CUSTOM")
+        ->default_val("RANDOM");
     gen_cmd->add_option("--sample", sample_out, "Path to save the generated sample")
         ->capture_default_str();
 
@@ -65,10 +69,35 @@ int cli_main(int argc, char **argv)
     {
         try
         {
+            std::cout << "Generating sample matrices with M=" << M << " N=" << N << " K=" << K
+                      << ", pattern=" << pattern_str << "\n";
+            if (pattern_str == "RANDOM")
+            {
+                pattern = RANDOM;
+            }
+            else if (pattern_str == "SEQUENTIAL")
+            {
+                pattern = SEQUENTIAL;
+            }
+            else if (pattern_str == "ONES")
+            {
+                pattern = ONES;
+            }
+            else if (pattern_str == "ZEROS")
+            {
+                pattern = ZEROS;
+            }
+            else if (pattern_str == "CUSTOM")
+            {
+                pattern = CUSTOM;
+            }
+            else
+            {
+                throw std::invalid_argument("Unknown pattern type: " + pattern_str);
+            }
             SampleConfig cfg{M, N, K};
-            SampleGenerator sg;
-            auto A = sg.generateA(cfg);
-            auto B = sg.generateB(cfg);
+            auto A = generate_matrix(cfg.M, cfg.K, 42, pattern);
+            auto B = generate_matrix(cfg.K, cfg.N, 1337, pattern);
             auto C = compute_reference_c(cfg, A, B);
             SampleData data{cfg, std::move(A), std::move(B), std::move(C)};
             save_sample_file(sample_out, data);
@@ -127,15 +156,14 @@ int cli_main(int argc, char **argv)
                   << " from " << sample_in << "\n";
 
         auto computed = MatrixBuffer::allocate(static_cast<std::size_t>(cfg.M) * static_cast<std::size_t>(cfg.N));
-        
 
         auto result = bench_gemm(op.get(), sample.A.data(), sample.B.data(), computed.data(),
                                  cfg.M, cfg.N, cfg.K);
         double flops = 2.0 * cfg.M * cfg.N * cfg.K;
-        double tflops = flops / (result.ms * 1e-3 * 1e9);
+        double gflops = flops / (result.ms * 1e-3 * 1e9);
 
         std::cout << "Time = " << result.ms << " ms\n";
-        std::cout << "TFLOPS = " << tflops << "\n";
+        std::cout << "GFLOPS = " << gflops << "\n";
 
         auto verify = verify_result(sample.C.data(), computed.data(), cfg.M, cfg.N);
         if (verify.ok)
@@ -167,7 +195,6 @@ int cli_main(int argc, char **argv)
             std::cout << "Computed Matrix C:\n";
             computed.print(cfg.M, cfg.N, std::cout);
             std::cout << "==============================\n";
-
         }
 
         if (!output_json.empty())
@@ -179,7 +206,7 @@ int cli_main(int argc, char **argv)
             ofs << "  \"N\": " << cfg.N << ",\n";
             ofs << "  \"K\": " << cfg.K << ",\n";
             ofs << "  \"time_ms\": " << result.ms << ",\n";
-            ofs << "  \"tflops\": " << tflops << ",\n";
+            ofs << "  \"gflops\": " << gflops << ",\n";
             ofs << "  \"verified\": " << (verify.ok ? "true" : "false") << ",\n";
             ofs << "  \"max_abs_error\": " << verify.max_abs_error << ",\n";
             ofs << "  \"max_rel_error\": " << verify.max_rel_error << "\n";
