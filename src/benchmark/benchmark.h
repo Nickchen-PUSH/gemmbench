@@ -1,7 +1,8 @@
 #pragma once
+#define ITERATIONS 1
 
 #include <chrono>
-
+#include <cstring>
 struct BenchResult
 {
     double ms;
