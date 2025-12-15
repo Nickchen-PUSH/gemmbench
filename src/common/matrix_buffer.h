@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <new>
 #include <stdexcept>
 #include <iostream>
@@ -104,6 +105,7 @@ public:
         }
 
         std::swap(ptr_, temp.ptr_);
+        is_column_major_ = true;
 
         // temp will release the old memory in its destructor
     }
@@ -113,6 +115,19 @@ public:
         if (ptr_ == nullptr || size_ != rows * cols)
         {
             throw std::runtime_error("Invalid matrix dimensions for printing");
+        }
+        if (is_column_major_)
+        {
+            // Print column-major matrix
+            for (std::size_t i = 0; i < rows; ++i)
+            {
+                for (std::size_t j = 0; j < cols; ++j)
+                {
+                    os << ptr_[j * rows + i] << " ";
+                }
+                os << "\n";
+            }
+            return;
         }
 
         for (std::size_t i = 0; i < rows; ++i)
@@ -125,7 +140,6 @@ public:
         }
     }
 
-
 private:
     static float *allocate_raw(std::size_t count, std::size_t alignment)
     {
@@ -136,6 +150,7 @@ private:
         {
             throw std::bad_alloc();
         }
+        memset(mem, 0, bytes);
         return static_cast<float *>(mem);
     }
 
@@ -147,4 +162,5 @@ private:
     float *ptr_ = nullptr;
     std::size_t size_ = 0;
     std::size_t alignment_ = 0;
+    bool is_column_major_ = false;
 };

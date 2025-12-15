@@ -107,3 +107,10 @@ SampleData load_sample_file(const std::string &path)
 
     return data;
 }
+
+void SampleData::convert_to_column_major()
+{
+    A.convert_to_column_major(cfg.M, cfg.K);
+    B.convert_to_column_major(cfg.K, cfg.N);
+    C.convert_to_column_major(cfg.M, cfg.N);
+}
